@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图集</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🖼️</text></svg>">
+<style>
+  :root {
+    --bg: #faf8f4;
+    --card: #ffffff;
+    --border: #e8e2d6;
+    --text: #2b2620;
+    --muted: #938a7a;
+    --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+
+  header {
+    max-width: 1200px; margin: 0 auto;
+    padding: 48px 24px 28px;
+    text-align: center;
+  }
+  header h1 { font-size: 24px; font-weight: 700; letter-spacing: .02em; }
+  header p { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px 60px; }
+
+  .grid {
+    column-count: 2; column-gap: 14px;
+  }
+  @media (min-width: 640px)  { .grid { column-count: 3; } }
+  @media (min-width: 960px)  { .grid { column-count: 4; } }
+  @media (min-width: 1280px) { .grid { column-count: 5; } }
+
+  .cell {
+    break-inside: avoid; margin-bottom: 14px;
+    border-radius: 10px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--border);
+    cursor: zoom-in;
+  }
+  .cell img {
+    width: 100%; display: block;
+    -webkit-user-drag: none; user-select: none;
+    transition: transform .25s ease;
+  }
+  .cell:hover img { transform: scale(1.03); }
+
+  .state {
+    text-align: center; color: var(--muted); font-size: 14px;
+    padding: 80px 20px; line-height: 1.9;
+  }
+  .state code {
+    background: var(--card); border: 1px solid var(--border);
+    padding: 1px 6px; border-radius: 5px; font-size: 13px;
+  }
+
+  /* ── Lightbox ── */
+  .lb {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(20,17,12,.94);
+    align-items: center; justify-content: center;
+  }
+  .lb.open { display: flex; }
+  .lb-img {
+    width: min(92vw, 1100px); height: min(86vh, 900px);
+    background-position: center; background-repeat: no-repeat; background-size: contain;
+    pointer-events: none;
+  }
+  .lb-close, .lb-prev, .lb-next {
+    position: fixed; color: #fff; background: rgba(255,255,255,.12);
+    border: none; border-radius: 50%; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; width: 44px; height: 44px;
+  }
+  .lb-close:hover, .lb-prev:hover, .lb-next:hover { background: rgba(255,255,255,.22); }
+  .lb-close { top: 20px; right: 20px; }
+  .lb-prev { left: 20px; top: 50%; transform: translateY(-50%); }
+  .lb-next { right: 20px; top: 50%; transform: translateY(-50%); }
+  .lb-counter {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,.7); font-size: 13px; letter-spacing: .04em;
+  }
+  .lb-title {
+    position: fixed; top: 20px; left: 20px;
+    color: rgba(255,255,255,.85); font-size: 14px; max-width: 60vw;
+  }
+
+  @media (max-width: 640px) {
+    .lb-prev, .lb-next { width: 38px; height: 38px; font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🖼️ 图集</h1>
+  <p>瀑布流作品展示 · 图片只读取 <code>images/</code> 文件夹</p>
+</header>
+
+<div class="wrap">
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="lb" id="lb" oncontextmenu="return false">
+  <div class="lb-title" id="lbTitle"></div>
+  <div class="lb-img" id="lbImg"></div>
+  <button class="lb-prev" id="lbPrev">‹</button>
+  <button class="lb-next" id="lbNext">›</button>
+  <button class="lb-close" id="lbClose">✕</button>
+  <div class="lb-counter" id="lbCounter"></div>
+</div>
+
+<script>
+const OWNER = 'lijian316';
+const REPO = 'gallery';
+const DIR = 'images';
+const IMG_EXT = /\.(jpe?g|png|webp|gif|avif|bmp)$/i;
+
+const $ = (id) => document.getElementById(id);
+let photos = [];
+let current = 0;
+
+function titleFromName(name) {
+  return name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim();
+}
+
+async function loadImages() {
+  const grid = $('grid');
+  try {
+    const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${DIR}`);
+    if (res.status === 404) {
+      grid.innerHTML = `<div class="state">这里还没有图片<br>把图片文件放进仓库的 <code>images/</code> 文件夹，提交推送后会自动显示在这里。</div>`;
+      return;
+    }
+    if (!res.ok) throw new Error('status ' + res.status);
+    const data = await res.json();
+    photos = (Array.isArray(data) ? data : [])
+      .filter(f => f.type === 'file' && IMG_EXT.test(f.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    if (!photos.length) {
+      grid.innerHTML = `<div class="state">这里还没有图片<br>把图片文件放进仓库的 <code>images/</code> 文件夹，提交推送后会自动显示在这里。</div>`;
+      return;
+    }
+
+    grid.innerHTML = photos.map((p, i) => `
+      <div class="cell" data-i="${i}">
+        <img src="${p.download_url}" alt="${titleFromName(p.name)}" loading="lazy" draggable="false" oncontextmenu="return false">
+      </div>
+    `).join('');
+
+    grid.querySelectorAll('.cell').forEach(cell => {
+      cell.addEventListener('click', () => openLightbox(+cell.dataset.i));
+    });
+  } catch (e) {
+    grid.innerHTML = `<div class="state">加载失败：${e.message}<br>可能是 GitHub API 请求过于频繁，稍后刷新重试。</div>`;
+  }
+}
+
+function openLightbox(i) {
+  current = i;
+  renderLightbox();
+  $('lb').classList.add('open');
+}
+function closeLightbox() { $('lb').classList.remove('open'); }
+function renderLightbox() {
+  const p = photos[current];
+  $('lbImg').style.backgroundImage = `url('${p.download_url}')`;
+  $('lbTitle').textContent = titleFromName(p.name);
+  $('lbCounter').textContent = `${current + 1} / ${photos.length}`;
+}
+function nextPhoto() { current = (current + 1) % photos.length; renderLightbox(); }
+function prevPhoto() { current = (current - 1 + photos.length) % photos.length; renderLightbox(); }
+
+$('lbClose').addEventListener('click', closeLightbox);
+$('lbNext').addEventListener('click', nextPhoto);
+$('lbPrev').addEventListener('click', prevPhoto);
+$('lb').addEventListener('click', e => { if (e.target.id === 'lb') closeLightbox(); });
+document.addEventListener('keydown', e => {
+  if (!$('lb').classList.contains('open')) return;
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowRight') nextPhoto();
+  if (e.key === 'ArrowLeft') prevPhoto();
+});
+
+loadImages();
+</script>
+</body>
+</html>
