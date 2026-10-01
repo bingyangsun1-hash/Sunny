@@ -117,8 +117,20 @@
 </div>
 
 <script>
-const OWNER = 'lijian316';
-const REPO = 'gallery';
+// 自动识别当前部署在哪个 GitHub Pages 仓库下（user.github.io/repo-name/），
+// 这样别人 fork 这个仓库后不用改代码，直接用自己仓库里的 images/ 就行。
+// 不在 *.github.io 域名下打开时（比如本地预览），用这两个兜底值。
+const FALLBACK_OWNER = 'lijian316';
+const FALLBACK_REPO = 'gallery';
+
+function detectRepo() {
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
+  if (!m) return { owner: FALLBACK_OWNER, repo: FALLBACK_REPO };
+  const repo = location.pathname.split('/').filter(Boolean)[0];
+  return { owner: m[1], repo: repo || FALLBACK_REPO };
+}
+
+const { owner: OWNER, repo: REPO } = detectRepo();
 const DIR = 'images';
 const IMG_EXT = /\.(jpe?g|png|webp|gif|avif|bmp)$/i;
 
@@ -150,7 +162,7 @@ const TITLE_CELL = `
     <div class="title-text-en">Sunny Sun Portfolio</div>
   </div>
 `;
-const EMPTY_MSG = `<div class="cell state-cell">这里还没有图片<br>把图片文件放进仓库的 <code>images/</code> 文件夹，提交推送后会自动显示在这里。</div>`;
+const EMPTY_MSG = '';
 
 function titleFromName(name) {
   return name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim();
