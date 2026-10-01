@@ -23,41 +23,47 @@
   }
   a { color: inherit; text-decoration: none; }
 
-  header {
-    max-width: 1200px; margin: 0 auto;
-    padding: 48px 24px 28px;
-    text-align: center;
-  }
-  header h1 { font-size: 24px; font-weight: 700; letter-spacing: .02em; }
-  header p { font-size: 13px; color: var(--muted); margin-top: 8px; }
-
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px 60px; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 20px; }
 
   .grid {
-    column-count: 2; column-gap: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-auto-rows: 220px;
+    gap: 14px;
   }
-  @media (min-width: 640px)  { .grid { column-count: 3; } }
-  @media (min-width: 960px)  { .grid { column-count: 4; } }
-  @media (min-width: 1280px) { .grid { column-count: 5; } }
 
   .cell {
-    break-inside: avoid; margin-bottom: 14px;
-    border-radius: 10px; overflow: hidden;
+    border-radius: 6px; overflow: hidden; position: relative;
     background: var(--card); border: 1px solid var(--border);
     cursor: zoom-in;
   }
   .cell img {
-    width: 100%; display: block;
+    width: 100%; height: 100%; object-fit: cover; display: block;
     -webkit-user-drag: none; user-select: none;
     transition: transform .25s ease;
   }
-  .cell:hover img { transform: scale(1.03); }
+  .cell:hover img { transform: scale(1.04); }
 
-  .state {
-    text-align: center; color: var(--muted); font-size: 14px;
-    padding: 80px 20px; line-height: 1.9;
+  .title-cell {
+    cursor: default; background: transparent; border: none;
+    display: flex; flex-direction: column; justify-content: center;
+    gap: 10px; padding: 26px;
   }
-  .state code {
+  .title-text { font-size: 22px; font-weight: 700; letter-spacing: .02em; }
+  .title-text-en { font-size: 13px; color: var(--muted); letter-spacing: .04em; margin-top: -4px; }
+  .title-sub { font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 6px; }
+  .title-sub code {
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 1px 6px; border-radius: 5px; font-size: 11px;
+  }
+
+  .state-cell {
+    grid-column: 1 / -1;
+    cursor: default; background: transparent; border: none;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; color: var(--muted); font-size: 14px; line-height: 1.9;
+  }
+  .state-cell code {
     background: var(--card); border: 1px solid var(--border);
     padding: 1px 6px; border-radius: 5px; font-size: 13px;
   }
@@ -100,11 +106,6 @@
 </head>
 <body>
 
-<header>
-  <h1>🖼️ 图集</h1>
-  <p>瀑布流作品展示 · 图片只读取 <code>images/</code> 文件夹</p>
-</header>
-
 <div class="wrap">
   <div class="grid" id="grid"></div>
 </div>
@@ -128,16 +129,26 @@ const $ = (id) => document.getElementById(id);
 let photos = [];
 let current = 0;
 
+const TITLE_CELL = `
+  <div class="cell title-cell">
+    <div class="title-text">xxx 作品集</div>
+    <div class="title-text-en">XXX Portfolio</div>
+    <div class="title-sub">图片只读取 <code>images/</code> 文件夹</div>
+  </div>
+`;
+const EMPTY_MSG = `<div class="cell state-cell">这里还没有图片<br>把图片文件放进仓库的 <code>images/</code> 文件夹，提交推送后会自动显示在这里。</div>`;
+
 function titleFromName(name) {
   return name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim();
 }
 
 async function loadImages() {
   const grid = $('grid');
+  grid.innerHTML = TITLE_CELL;
   try {
     const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${DIR}`);
     if (res.status === 404) {
-      grid.innerHTML = `<div class="state">这里还没有图片<br>把图片文件放进仓库的 <code>images/</code> 文件夹，提交推送后会自动显示在这里。</div>`;
+      grid.innerHTML = TITLE_CELL + EMPTY_MSG;
       return;
     }
     if (!res.ok) throw new Error('status ' + res.status);
@@ -147,21 +158,21 @@ async function loadImages() {
       .sort((a, b) => a.name.localeCompare(b.name));
 
     if (!photos.length) {
-      grid.innerHTML = `<div class="state">这里还没有图片<br>把图片文件放进仓库的 <code>images/</code> 文件夹，提交推送后会自动显示在这里。</div>`;
+      grid.innerHTML = TITLE_CELL + EMPTY_MSG;
       return;
     }
 
-    grid.innerHTML = photos.map((p, i) => `
+    grid.innerHTML = TITLE_CELL + photos.map((p, i) => `
       <div class="cell" data-i="${i}">
         <img src="${p.download_url}" alt="${titleFromName(p.name)}" loading="lazy" draggable="false" oncontextmenu="return false">
       </div>
     `).join('');
 
-    grid.querySelectorAll('.cell').forEach(cell => {
+    grid.querySelectorAll('.cell[data-i]').forEach(cell => {
       cell.addEventListener('click', () => openLightbox(+cell.dataset.i));
     });
   } catch (e) {
-    grid.innerHTML = `<div class="state">加载失败：${e.message}<br>可能是 GitHub API 请求过于频繁，稍后刷新重试。</div>`;
+    grid.innerHTML = TITLE_CELL + `<div class="cell state-cell">加载失败：${e.message}<br>可能是 GitHub API 请求过于频繁，稍后刷新重试。</div>`;
   }
 }
 
